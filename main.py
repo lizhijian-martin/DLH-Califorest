@@ -1,6 +1,7 @@
 import csv
 import numpy as np
 import time
+import os
 from sklearn.datasets import make_hastie_10_2
 from sklearn.datasets import load_breast_cancer
 from sklearn.metrics import roc_auc_score
@@ -17,6 +18,25 @@ import mimic_extract as mimic
 
 
 def read_data(dataset, random_seed):
+    """
+    Load and preprocess the specified dataset for training and testing.
+
+    Args:
+        dataset (str): Name of the dataset to load. Options include:
+            - "hastie": Hastie-10-2 synthetic dataset.
+            - "breast_cancer": Breast cancer dataset.
+            - "mimic3_mort_hosp": MIMIC-III dataset for hospital mortality.
+            - "mimic3_mort_icu": MIMIC-III dataset for ICU mortality.
+            - "mimic3_los_3": MIMIC-III dataset for length of stay (3-day threshold).
+            - "mimic3_los_7": MIMIC-III dataset for length of stay (7-day threshold).
+        random_seed (int): Random seed for reproducibility.
+
+    Returns:
+        tuple: (X_train, X_test, y_train, y_test) containing the training and testing data.
+
+    Source:
+        https://github.com/yubin-park/califorest/blob/master/analysis/run_chil_exp.py
+    """
     X_train, X_test, y_train, y_test = None, None, None, None
 
     if dataset == "hastie":
@@ -26,18 +46,23 @@ def read_data(dataset, random_seed):
         X = poly.fit_transform(X)
         y[y < 0] = 0
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+
     elif dataset == "breast_cancer":
         np.random.seed(random_seed)
         poly = PolynomialFeatures()
         X, y = load_breast_cancer(return_X_y=True)
         X = poly.fit_transform(X)
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+
     elif dataset == "mimic3_mort_hosp":
         X_train, X_test, y_train, y_test = mimic.extract(random_seed, "mort_hosp")
+
     elif dataset == "mimic3_mort_icu":
         X_train, X_test, y_train, y_test = mimic.extract(random_seed, "mort_icu")
+
     elif dataset == "mimic3_los_3":
         X_train, X_test, y_train, y_test = mimic.extract(random_seed, "los_3")
+
     elif dataset == "mimic3_los_7":
         X_train, X_test, y_train, y_test = mimic.extract(random_seed, "los_7")
 
@@ -45,8 +70,21 @@ def read_data(dataset, random_seed):
 
 
 def init_models(n_estimators, max_depth):
-    mss = 3
-    msl = 1
+    """
+    Initialize a dictionary of machine learning models for comparison.
+
+    Args:
+        n_estimators (int): Number of trees in the forest.
+        max_depth (int): Maximum depth of the trees.
+
+    Returns:
+        dict: Dictionary of initialized models with keys as model names and values as model instances.
+
+    Source:
+        https://github.com/yubin-park/califorest/blob/master/analysis/run_chil_exp.py
+    """
+    mss = 3  # Minimum samples required to split an internal node
+    msl = 1  # Minimum samples required to be at a leaf node
     models = {
         "CF-Iso": CaliForest(
             n_estimators=n_estimators,
@@ -87,6 +125,21 @@ def init_models(n_estimators, max_depth):
 
 
 def run(dataset, random_seed, n_estimators=300, depth=10):
+    """
+    Train and evaluate models on the specified dataset.
+
+    Args:
+        dataset (str): Name of the dataset to use.
+        random_seed (int): Random seed for reproducibility.
+        n_estimators (int, optional): Number of trees in the forest. Defaults to 300.
+        depth (int, optional): Maximum depth of the trees. Defaults to 10.
+
+    Returns:
+        list: List of results for each model, including performance metrics.
+
+    Source:
+        https://github.com/yubin-park/califorest/blob/master/analysis/run_chil_exp.py
+    """
     X_train, X_test, y_train, y_test = read_data(dataset, random_seed)
 
     output = []
@@ -130,6 +183,7 @@ def run(dataset, random_seed, n_estimators=300, depth=10):
 
 
 if __name__ == "__main__":
+    # Initialize the output with column headers
     output = [
         [
             "dataset",
@@ -145,58 +199,27 @@ if __name__ == "__main__":
         ]
     ]
 
-    # Choose from one of the 6 datasets
-    # dataset = "hastie"
-    # dataset = "breast_cancer"
-
-    # dataset = "mimic3_los_3"
-    # dataset = "mimic3_los_7"
+    # Choose one of the 6 datasets
     # dataset = "mimic3_mort_icu"
-    dataset = "mimic3_mort_hosp"
+    dataset = "mimic3_los_3"  # currently doing this one
+    # dataset = "mimic3_los_7"
+    # dataset = "mimic3_mort_hosp" 
 
     # Adjust the number of estimators and depth of trees according to the paper
-    n = 300
-    d = 10
+    n = 300  # Number of estimators
+    d = 10  # Maximum depth of trees
 
-# EDIT THIS CELL FOR CHANGING DATASET AND HYPERPARAMETERS
-
-if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    #  parser.add_argument("dataset", type=str)
-    #  args = parser.parse_args()
-
-    output = [
-        [
-            "dataset",
-            "model",
-            "random_seed",
-            "auc",
-            "brier",
-            "brier_scaled",
-            "hosmer_lemshow",
-            "speigelhalter",
-            "reliability_small",
-            "reliability_large",
-        ]
-    ]
-
-    # Choose from one of the 6 datasets
-    # dataset = "hastie"
-    # dataset = "breast_cancer"
-
-    # dataset = "mimic3_los_3"
-    # dataset = "mimic3_los_7"
-    # dataset = "mimic3_mort_icu"
-    dataset = "mimic3_mort_hosp"
-
-    # Adjust the number of estimators and depth of trees according to the paper
-    n = 300
-    d = 10
-
+    # Run the experiment for 10 random seeds
     for rs in range(10):
         output += run(dataset, rs, n_estimators=n, depth=d)
 
+    # Save results to a CSV file
     fn = "results/{}.csv".format(dataset)
+    
+    # Ensure the results directory exists
+    results_dir = os.path.dirname(fn)
+    os.makedirs(results_dir, exist_ok=True)
+
     with open(fn, "w") as fp:
         writer = csv.writer(fp)
         writer.writerows(output)

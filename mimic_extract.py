@@ -126,85 +126,30 @@ def extract(
             - y_train (np.ndarray): Training set target values.
             - y_test (np.ndarray): Test set target values.
     """
-    # Load static patient data and hourly time-series data
-    statics = pd.read_hdf("data/all_hourly_data.h5", "patients")
-    data_full_lvl2 = pd.read_hdf("data/all_hourly_data.h5", "vitals_labs")
+    # Load preprocessed data
+    X = np.load("data/mimic_X.npy")
+    Y = np.load("data/mimic_Y.npy")
+    subjects = pd.read_pickle("data/mimic_subjects.pkl")
 
-    # Filter patients with ICU stays longer than the observation window + gap
-    statics = statics[statics.max_hours > WINDOW_SIZE + GAP_TIME]
-
-    # Prepare target variables
-    Ys = statics.loc[:, ["mort_hosp", "mort_icu", "los_icu"]]
-    Ys.loc[:, "mort_hosp"] = (Ys.loc[:, "mort_hosp"]).astype(int)
-    Ys.loc[:, "mort_icu"] = (Ys.loc[:, "mort_icu"]).astype(int)
-    Ys.loc[:, "los_3"] = (Ys.loc[:, "los_icu"] > 3).astype(int)
-    Ys.loc[:, "los_7"] = (Ys.loc[:, "los_icu"] > 7).astype(int)
-    Ys.drop(columns=["los_icu"], inplace=True)
-
-    # Filter time-series data to only include relevant ICU stays and time window
-    lvl2 = data_full_lvl2.loc[
-        (
-            data_full_lvl2.index.get_level_values("icustay_id").isin(
-                set(Ys.index.get_level_values("icustay_id"))
-            )
-        )
-        & (data_full_lvl2.index.get_level_values("hours_in") < WINDOW_SIZE),
-        :,
-    ]
-
-    # Ensure subject pools match between time-series and static data
-    lvl2_subj_idx, Ys_subj_idx = [
-        df.index.get_level_values("subject_id") for df in (lvl2, Ys)
-    ]
-    lvl2_subjects = set(lvl2_subj_idx)
-    assert lvl2_subjects == set(Ys_subj_idx), "Subject ID pools differ!"
+    # Get target column index
+    target_idx = {"mort_hosp": 0, "mort_icu": 1, "los_3": 2, "los_7": 3}[target]
 
     # Split subjects into train and test sets
     np.random.seed(random_seed)
-    subjects = np.random.permutation(list(lvl2_subjects))
-    N = len(lvl2_subjects)
-    N_train, N_test = int(TRAIN_FRAC * N), int(TEST_FRAC * N)
+    unique_subjects = np.array(list(set(subjects)))
+    subjects = np.random.permutation(unique_subjects)
+    N = len(subjects)
+    N_train = int(TRAIN_FRAC * N)
     train_subj = subjects[:N_train]
     test_subj = subjects[N_train:]
 
-    # Split both time-series and target data by subject
-    [(lvl2_train, lvl2_test), (Ys_train, Ys_test)] = [
-        [
-            df.loc[df.index.get_level_values("subject_id").isin(s), :]
-            for s in (train_subj, test_subj)
-        ]
-        for df in (lvl2, Ys)
-    ]
+    # Split data by subject
+    train_mask = np.isin(subjects, train_subj)
+    test_mask = np.isin(subjects, test_subj)
 
-    idx = pd.IndexSlice
-
-    # Compute mean and std for normalization using only the training set
-    lvl2_means = lvl2_train.loc[:, idx[:, "mean"]].mean(axis=0)
-    lvl2_stds = lvl2_train.loc[:, idx[:, "mean"]].std(axis=0)
-
-    # Center (normalize) the 'mean' features in both train and test sets
-    vals_centered = lvl2_train.loc[:, idx[:, "mean"]] - lvl2_means
-    lvl2_train.loc[:, idx[:, "mean"]] = vals_centered
-    vals_centered = lvl2_test.loc[:, idx[:, "mean"]] - lvl2_means
-    lvl2_test.loc[:, idx[:, "mean"]] = vals_centered
-
-    # Impute missing values and add mask/time-since-measured features
-    lvl2_train, lvl2_test = [simple_imputer(df) for df in (lvl2_train, lvl2_test)]
-
-    # Pivot the time-series data to a flat (wide) format for ML models
-    lvl2_flat_train, lvl2_flat_test = [
-        (
-            df.pivot_table(
-                index=["subject_id", "hadm_id", "icustay_id"], columns=["hours_in"]
-            )
-        )
-        for df in (lvl2_train, lvl2_test)
-    ]
-
-    # Return features and targets for train and test sets
     return (
-        lvl2_flat_train.values,
-        lvl2_flat_test.values,
-        Ys_train.loc[:, target].values,
-        Ys_test.loc[:, target].values,
+        X[train_mask],
+        X[test_mask],
+        Y[train_mask, target_idx],
+        Y[test_mask, target_idx],
     )
