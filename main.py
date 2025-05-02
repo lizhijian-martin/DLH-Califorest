@@ -200,8 +200,8 @@ if __name__ == "__main__":
     ]
 
     # Choose one of the 6 datasets
-    # dataset = "mimic3_mort_icu"
-    dataset = "mimic3_los_3"  # currently doing this one
+    dataset = "mimic3_mort_icu" # currently doing this one
+    # dataset = "mimic3_los_3"  
     # dataset = "mimic3_los_7"
     # dataset = "mimic3_mort_hosp" 
 
