@@ -6,7 +6,7 @@ from sklearn.tree import DecisionTreeClassifier as Tree
 from sklearn.utils.validation import check_array, check_is_fitted, check_X_y
 
 
-class CaliForest(ClassifierMixin, BaseEstimator):
+class CaliForestTweak(ClassifierMixin, BaseEstimator):
     """
     A calibrated random forest classifier that combines decision trees with post-hoc calibration.
 
@@ -22,6 +22,7 @@ class CaliForest(ClassifierMixin, BaseEstimator):
         ctype (str): Calibration type ("isotonic" or "logistic") (default: "isotonic").
         alpha0 (float): Prior parameter for calibration weights (default: 100).
         beta0 (float): Prior parameter for calibration weights (default: 25).
+        use_oob_weight (bool): Whether to use out-of-bag weights (default: True).
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class CaliForest(ClassifierMixin, BaseEstimator):
         ctype="isotonic",
         alpha0=100,
         beta0=25,
+        use_oob_weight=True,
     ):
         self.n_estimators = n_estimators
         self.criterion = criterion
@@ -43,6 +45,7 @@ class CaliForest(ClassifierMixin, BaseEstimator):
         self.ctype = ctype
         self.alpha0 = alpha0
         self.beta0 = beta0
+        self.use_oob_weight = use_oob_weight
 
     def fit(self, X, y):
         """
@@ -111,9 +114,12 @@ class CaliForest(ClassifierMixin, BaseEstimator):
         z_true = y[oob_idx]  # True labels for calibration
 
         # Calculate calibration weights
-        beta = self.beta0 + np.nanvar(Y_oob_, axis=1) * n_oob_ / 2
-        alpha = self.alpha0 + n_oob_ / 2
-        z_weight = alpha / beta
+        if self.use_oob_weight:
+            beta = self.beta0 + np.nanvar(Y_oob_, axis=1) * n_oob_ / 2
+            alpha = self.alpha0 + n_oob_ / 2
+            z_weight = alpha / beta
+        else:
+            z_weight = np.ones(len(z_true))  # Unit weights when OOB weighting disabled
 
         # Fit the calibrator
         if self.ctype == "logistic":

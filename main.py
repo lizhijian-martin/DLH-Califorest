@@ -9,6 +9,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import PolynomialFeatures
 from califorest.califorest import CaliForest
+from califorest.califorest_tweak import CaliForestTweak
 from califorest.rc30 import RC30
 from califorest.metrics import hosmer_lemeshow
 from califorest.metrics import reliability
@@ -99,6 +100,22 @@ def init_models(n_estimators, max_depth):
             min_samples_split=mss,
             min_samples_leaf=msl,
             ctype="logistic",
+        ),
+        "CF-Iso-NoWeight": CaliForestTweak(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            min_samples_split=mss,
+            min_samples_leaf=msl,
+            ctype="isotonic",
+            use_oob_weight=False,
+        ),
+        "CF-Logit-NoWeight": CaliForestTweak(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            min_samples_split=mss,
+            min_samples_leaf=msl,
+            ctype="logistic",
+            use_oob_weight=False,
         ),
         "RC-Iso": RC30(
             n_estimators=n_estimators,
@@ -199,17 +216,17 @@ if __name__ == "__main__":
         ]
     ]
 
-    # Choose one of the 6 datasets
-    dataset = "mimic3_mort_icu" # currently doing this one
+    # Choose one of the 4 datasets
+    # dataset = "mimic3_mort_icu" 
     # dataset = "mimic3_los_3"  
     # dataset = "mimic3_los_7"
-    # dataset = "mimic3_mort_hosp" 
+    dataset = "mimic3_mort_hosp" # currently doing this one
 
     # Adjust the number of estimators and depth of trees according to the paper
     n = 300  # Number of estimators
     d = 10  # Maximum depth of trees
 
-    # Run the experiment for 10 random seeds
+    # Run the experiment for 5 random seeds
     for rs in range(10):
         output += run(dataset, rs, n_estimators=n, depth=d)
 
